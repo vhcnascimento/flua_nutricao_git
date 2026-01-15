@@ -98,15 +98,23 @@ st.markdown("""
         opacity: 0.85;
     }
 
-    /* Estilo para tabelas com linhas alternadas */
-    .dataframe tbody tr:nth-child(odd) {
+    /* Estilo para tabelas com linhas alternadas - FORÇANDO APLICAÇÃO */
+    div[data-testid="stDataFrame"] tbody tr:nth-child(odd) {
         background-color: #ffffff !important;
     }
-    .dataframe tbody tr:nth-child(even) {
+    div[data-testid="stDataFrame"] tbody tr:nth-child(even) {
         background-color: #e8f7fa !important;
     }
-    .dataframe tbody tr:hover {
+    div[data-testid="stDataFrame"] tbody tr:hover {
         background-color: #d0ecf1 !important;
+    }
+    
+    /* Aplicar também em elementos da tabela diretamente */
+    .stDataFrame tbody tr:nth-child(odd) td {
+        background-color: #ffffff !important;
+    }
+    .stDataFrame tbody tr:nth-child(even) td {
+        background-color: #e8f7fa !important;
     }
     
     /* Aumentar tamanho da fonte em tabelas */
@@ -127,13 +135,13 @@ st.markdown("""
         color: white !important;
     }
     
-    /* Labels maiores nos KPIs */
+    /* Labels MAIORES nos KPIs - AJUSTE SOLICITADO */
     .stMetric label {
-        font-size: 1.2rem !important;
-        font-weight: 600 !important;
+        font-size: 1.4rem !important;
+        font-weight: 700 !important;
     }
     .stMetric [data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
+        font-size: 2.2rem !important;
         font-weight: bold !important;
     }
 
@@ -204,6 +212,14 @@ def processar_disponibilidade(df):
     df_trd['Nutri'] = df['Unnamed: 6'].copy()
     df_trd.drop(columns=['Mês_num'], inplace=True)
     
+    # Implementar nomenclatura reduzida conforme solicitado
+    df_trd["Nutri"] = (
+        df_trd["Nutri"]
+        .str.strip()
+        .str.split()
+        .apply(lambda x: f"{x[0]} {x[-1][0]}." if len(x) > 1 else x[0])
+    )
+    
     return label_semana(df_trd)
 
 def processar_ocupacao(df):
@@ -212,6 +228,14 @@ def processar_ocupacao(df):
     df_trd.rename(columns={'DATA':'Data completa', 'RESPONSÁVEL':'Nutri'}, inplace=True)
     df_trd["Data"] = df_trd["Data completa"].str.split(" -").str[0]
     df_trd["Data"] = pd.to_datetime(df_trd["Data"], format="%d/%m/%Y", errors="coerce")
+    
+    # Aplicar nomenclatura reduzida também na ocupação
+    df_trd["Nutri"] = (
+        df_trd["Nutri"]
+        .str.strip()
+        .str.split()
+        .apply(lambda x: f"{x[0]} {x[-1][0]}." if len(x) > 1 else x[0])
+    )
     
     return label_semana(df_trd)
 
@@ -535,7 +559,7 @@ elif st.session_state.current_step == 3:
         df_output[middle_cols_sorted + col_total] = df_output[middle_cols_sorted + col_total].astype(int)
         df_output = df_output.sort_index()
         
-        # KPIs principais
+        # KPIs principais - TAMANHO AUMENTADO
         st.subheader("📈 KPIs Principais")
         
         df_semana = df_output.pivot_table(
@@ -625,22 +649,138 @@ elif st.session_state.current_step == 3:
                     delta_color="normal" if diferenca <= 0 else "inverse"
                 )
         
-        # TABELA DETALHADA - MOVIDA PARA CIMA (logo após KPIs)
+        # TABELA DETALHADA - com linhas alternadas branco/cinza
         st.markdown("---")
         st.subheader(f"📋 Tabela Detalhada - {periodo_label}")
         
-        # Simplificar tabela detalhada
-        df_output_simplified = df_output.copy()
-        df_output_simplified.index.name = "Semana"
-        
-        # Renomear coluna CHECK para Tipo
-        df_output_simplified = df_output_simplified.rename(columns={'CHECK': 'Tipo'})
+        # Estilizar tabela com linhas alternadas
+        df_output_display = df_output.copy()
+        df_output_display.index.name = "Semana"
+        df_output_display = df_output_display.rename(columns={'CHECK': 'Tipo'})
         
         # Formatar números
         for col in middle_cols_sorted + col_total:
-            df_output_simplified[col] = df_output_simplified[col].apply(lambda x: formatar_numero(x))
+            df_output_display[col] = df_output_display[col].apply(lambda x: formatar_numero(x))
         
-        st.dataframe(df_output_simplified, use_container_width=True, height=500)
+        # Reset index para evitar problemas com índices duplicados
+        df_output_display = df_output_display.reset_index()
+        
+        # Aplicar estilo com linhas alternadas
+        def apply_row_colors(row):
+            idx = row.name
+            if idx % 2 == 0:
+                return ['background-color: #ffffff'] * len(row)
+            else:
+                return ['background-color: #e8f7fa'] * len(row)
+        
+        st.dataframe(
+            df_output_display.style.apply(apply_row_colors, axis=1),
+            use_container_width=True, 
+            height=500,
+            hide_index=True
+        )
+        
+        # TABELA RESUMO POR SEMANA - movida para depois da detalhada, fonte maior, valores centralizados
+        st.markdown("---")
+        st.subheader(f"📅 Resumo por Semana - {periodo_label}")
+        
+        df_semana_display = df_semana.copy()
+        df_semana_display["% de Ocupação"] = (
+            df_semana_display["Ocupação"] / df_semana_display["Oferta"]
+        ).replace([np.inf, np.nan], 0) * 100
+        
+        df_semana_display["% Horários Vagos"] = 100 - df_semana_display["% de Ocupação"]
+        
+        # Formatar colunas
+        df_semana_display["Oferta"] = df_semana_display["Oferta"].apply(formatar_numero)
+        df_semana_display["Ocupação"] = df_semana_display["Ocupação"].apply(formatar_numero)
+        df_semana_display["% de Ocupação"] = df_semana_display["% de Ocupação"].apply(formatar_percentual)
+        df_semana_display["% Horários Vagos"] = df_semana_display["% Horários Vagos"].apply(formatar_percentual)
+        
+        # Reorganizar colunas
+        df_semana_display = df_semana_display[["Oferta", "Ocupação", "% de Ocupação", "% Horários Vagos"]]
+        
+        # Reset index para aplicar estilo
+        df_semana_display = df_semana_display.reset_index()
+        df_semana_display = df_semana_display.rename(columns={'Semana_label': 'Semana'})
+        
+        # Aplicar cores alternadas
+        def apply_row_colors(row):
+            idx = row.name
+            if idx % 2 == 0:
+                return ['background-color: #ffffff'] * len(row)
+            else:
+                return ['background-color: #e8f7fa'] * len(row)
+        
+        st.dataframe(
+            df_semana_display.style.apply(apply_row_colors, axis=1),
+            use_container_width=True, 
+            height=300,
+            hide_index=True
+        )
+        
+        # GRÁFICO DE OCUPAÇÃO SEMANAL - ordem: Oferta primeiro, depois Ocupação
+        st.markdown("---")
+        st.subheader("📊 Ocupação Semanal")
+        
+        # Recalcular para valores numéricos
+        df_semana_numeric = df_output.pivot_table(
+            index="Semana_label",
+            columns="CHECK",
+            values="TOTAL",
+            aggfunc="sum",
+            fill_value=0
+        )
+        
+        for col in ["Oferta", "Ocupação"]:
+            if col not in df_semana_numeric.columns:
+                df_semana_numeric[col] = 0
+        
+        fig_semana = go.Figure()
+        
+        # ORDEM CORRIGIDA: Oferta primeiro, depois Ocupação
+        fig_semana.add_trace(go.Bar(
+            x=df_semana_numeric.index,
+            y=df_semana_numeric['Oferta'],
+            name='Oferta',
+            marker_color='#66cbdd'
+        ))
+        
+        fig_semana.add_trace(go.Bar(
+            x=df_semana_numeric.index,
+            y=df_semana_numeric['Ocupação'],
+            name='Ocupação',
+            marker_color='#044851'
+        ))
+        
+        # Adicionar linha de 80% de ocupação
+        ocupacao_80 = df_semana_numeric['Oferta'] * 0.8
+        fig_semana.add_trace(go.Scatter(
+            x=df_semana_numeric.index,
+            y=ocupacao_80,
+            name='Meta 80% Ocupação',
+            mode='lines',
+            line=dict(color='#fcc105', width=3, dash='dash')
+        ))
+        
+        fig_semana.update_layout(
+            barmode='group',
+            title={
+                'text': f'Oferta vs Ocupação por Semana - {periodo_label}',
+                'font': {'size': 20}  # Título maior
+            },
+            xaxis_title='Semana',
+            yaxis_title='Quantidade de Janelas',
+            height=450,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+        st.plotly_chart(fig_semana, use_container_width=True)
         
         # Tabela resumida por nutricionista
         st.markdown("---")
@@ -663,9 +803,26 @@ elif st.session_state.current_step == 3:
             "% Horários Vagos": percent_vago.apply(formatar_percentual)
         })
         
-        st.dataframe(df_percent_nutri, use_container_width=True, height=400)
+        # Reset index para aplicar estilo
+        df_percent_nutri = df_percent_nutri.reset_index()
+        df_percent_nutri = df_percent_nutri.rename(columns={'index': 'Nutricionista'})
         
-        # Gráfico de ocupação por nutricionista - MOVIDO PARA LOGO ABAIXO
+        # Aplicar cores alternadas
+        def apply_row_colors(row):
+            idx = row.name
+            if idx % 2 == 0:
+                return ['background-color: #ffffff'] * len(row)
+            else:
+                return ['background-color: #e8f7fa'] * len(row)
+        
+        st.dataframe(
+            df_percent_nutri.style.apply(apply_row_colors, axis=1),
+            use_container_width=True, 
+            height=400,
+            hide_index=True
+        )
+        
+        # GRÁFICO DE OCUPAÇÃO POR NUTRICIONISTA - Ajustes de legenda e ordem
         st.markdown("---")
         st.subheader("👥 Taxa de Ocupação por Nutricionista")
         
@@ -675,22 +832,25 @@ elif st.session_state.current_step == 3:
         
         df_nutri_plot = pd.DataFrame({
             "Nutricionista": percent_ocupacao_numeric.index,
-            "% Ocupação": percent_ocupacao_numeric.values,
-            "% Horários Vagos": percent_vago_numeric.values
+            "% Horários Vagos": percent_vago_numeric.values,
+            "% Ocupação": percent_ocupacao_numeric.values
         })
         
         # Remover TOTAL do gráfico
         df_nutri_plot = df_nutri_plot[df_nutri_plot["Nutricionista"] != "TOTAL"]
-        df_nutri_plot = df_nutri_plot.sort_values("% Ocupação", ascending=False)
+        # ORDEM CORRIGIDA: maior ocupação no topo, menor embaixo
+        df_nutri_plot = df_nutri_plot.sort_values("% Ocupação", ascending=True)
         
         fig_nutri = go.Figure()
         
+        # ORDEM DA LEGENDA CORRIGIDA: mesma ordem visual do gráfico (vermelho->verde)
         fig_nutri.add_trace(go.Bar(
             y=df_nutri_plot["Nutricionista"],
             x=df_nutri_plot["% Horários Vagos"],
             name="% Horários Vagos",
             orientation='h',
-            marker_color='#eb4524'
+            marker_color='#eb4524',
+            showlegend=True
         ))
         
         fig_nutri.add_trace(go.Bar(
@@ -698,7 +858,8 @@ elif st.session_state.current_step == 3:
             x=df_nutri_plot["% Ocupação"],
             name="% Ocupação",
             orientation='h',
-            marker_color='#c3d76b'
+            marker_color='#c3d76b',
+            showlegend=True
         ))
         
         fig_nutri.update_layout(
@@ -712,93 +873,13 @@ elif st.session_state.current_step == 3:
                 yanchor="bottom",
                 y=1.02,
                 xanchor="right",
-                x=1
+                x=1,
+                traceorder='normal'  # Ordem normal para manter vermelho->verde
             ),
             xaxis=dict(range=[0, 100])
         )
         
         st.plotly_chart(fig_nutri, use_container_width=True)
-        
-        # Tabela resumida por semana
-        st.markdown("---")
-        st.subheader(f"📅 Resumo por Semana - {periodo_label}")
-        
-        df_semana_display = df_semana.copy()
-        df_semana_display["% de Ocupação"] = (
-            df_semana_display["Ocupação"] / df_semana_display["Oferta"]
-        ).replace([np.inf, np.nan], 0) * 100
-        
-        df_semana_display["% Horários Vagos"] = 100 - df_semana_display["% de Ocupação"]
-        
-        # Formatar colunas
-        df_semana_display["Oferta"] = df_semana_display["Oferta"].apply(formatar_numero)
-        df_semana_display["Ocupação"] = df_semana_display["Ocupação"].apply(formatar_numero)
-        df_semana_display["% de Ocupação"] = df_semana_display["% de Ocupação"].apply(formatar_percentual)
-        df_semana_display["% Horários Vagos"] = df_semana_display["% Horários Vagos"].apply(formatar_percentual)
-        
-        # Reorganizar colunas
-        df_semana_display = df_semana_display[["Oferta", "Ocupação", "% de Ocupação", "% Horários Vagos"]]
-        
-        st.dataframe(df_semana_display, use_container_width=True, height=400)
-        
-        # Gráfico de ocupação semanal
-        st.markdown("---")
-        st.subheader("📊 Ocupação Semanal")
-        
-        # Recalcular para valores numéricos
-        df_semana_numeric = df_output.pivot_table(
-            index="Semana_label",
-            columns="CHECK",
-            values="TOTAL",
-            aggfunc="sum",
-            fill_value=0
-        )
-        
-        for col in ["Oferta", "Ocupação"]:
-            if col not in df_semana_numeric.columns:
-                df_semana_numeric[col] = 0
-        
-        fig_semana = go.Figure()
-        
-        fig_semana.add_trace(go.Bar(
-            x=df_semana_numeric.index,
-            y=df_semana_numeric['Ocupação'],
-            name='Ocupação',
-            marker_color='#044851'
-        ))
-        
-        fig_semana.add_trace(go.Bar(
-            x=df_semana_numeric.index,
-            y=df_semana_numeric['Oferta'],
-            name='Oferta',
-            marker_color='#66cbdd'
-        ))
-        
-        # Adicionar linha de 80% de ocupação
-        ocupacao_80 = df_semana_numeric['Oferta'] * 0.8
-        fig_semana.add_trace(go.Scatter(
-            x=df_semana_numeric.index,
-            y=ocupacao_80,
-            name='Meta 80% Ocupação',
-            mode='lines',
-            line=dict(color='#fcc105', width=3, dash='dash')
-        ))
-        
-        fig_semana.update_layout(
-            barmode='group',
-            title=f'Oferta vs Ocupação por Semana - {periodo_label}',
-            xaxis_title='Semana',
-            yaxis_title='Quantidade de Janelas',
-            height=450,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
-        st.plotly_chart(fig_semana, use_container_width=True)
         
         # Download dos resultados
         st.markdown("---")
@@ -844,6 +925,15 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #7f8c8d; padding: 1rem;">
     <strong>Dashboard de Disponibilidade - Nutricionistas</strong><br>
-    Análise Semanal | Versão 2.1
+    Análise Semanal | Versão 2.2 - Ajustes Homologação
 </div>
 """, unsafe_allow_html=True)
+
+
+
+# df_disp["nome_curto"] = (
+#     df_disp["Nutri"]
+#         .str.strip()
+#         .str.split()
+#         .apply(lambda x: f"{x[0]} {x[-1][0]}" if len(x) > 1 else x[0])
+# )
