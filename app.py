@@ -653,6 +653,22 @@ elif st.session_state.current_step == 3:
         st.markdown("---")
         st.subheader(f"📋 Tabela Detalhada - {periodo_label}")
         
+        # Ordenar df_output cronologicamente antes de exibir
+        import re
+        def extract_sort_key(label):
+            match = re.search(r'^(\d+)\s+\w+\s+-\s+Sem\s+(\d+)', label)
+            if match:
+                mes = int(match.group(1))
+                semana = int(match.group(2))
+                return (mes, semana)
+            return (0, 0)
+        
+        # Criar chave de ordenação
+        sort_keys = {idx: extract_sort_key(idx) for idx in df_output.index}
+        df_output['_sort_key'] = df_output.index.map(sort_keys)
+        df_output = df_output.sort_values('_sort_key')
+        df_output = df_output.drop(columns=['_sort_key'])
+        
         # Estilizar tabela com linhas alternadas
         df_output_display = df_output.copy()
         df_output_display.index.name = "Semana"
@@ -683,6 +699,21 @@ elif st.session_state.current_step == 3:
         # TABELA RESUMO POR SEMANA - movida para depois da detalhada, fonte maior, valores centralizados
         st.markdown("---")
         st.subheader(f"📅 Resumo por Semana - {periodo_label}")
+        
+        # Ordenar cronologicamente
+        import re
+        def extract_sort_key(label):
+            match = re.search(r'^(\d+)\s+\w+\s+-\s+Sem\s+(\d+)', label)
+            if match:
+                mes = int(match.group(1))
+                semana = int(match.group(2))
+                return (mes, semana)
+            return (0, 0)
+        
+        sort_keys = {idx: extract_sort_key(idx) for idx in df_semana.index}
+        df_semana['_sort_key'] = df_semana.index.map(sort_keys)
+        df_semana = df_semana.sort_values('_sort_key')
+        df_semana = df_semana.drop(columns=['_sort_key'])
         
         df_semana_display = df_semana.copy()
         df_semana_display["% de Ocupação"] = (
@@ -736,6 +767,28 @@ elif st.session_state.current_step == 3:
             if col not in df_semana_numeric.columns:
                 df_semana_numeric[col] = 0
         
+        # Criar chave de ordenação baseada no mês (número) e semana
+        # Formato: "11 Nov - Sem 1 - 01 a 02"
+        import re
+        def extract_sort_key(label):
+            match = re.search(r'^(\d+)\s+\w+\s+-\s+Sem\s+(\d+)', label)
+            if match:
+                mes = int(match.group(1))
+                semana = int(match.group(2))
+                return (mes, semana)
+            return (0, 0)
+        
+        # Criar coluna temporária para ordenação
+        sort_keys = [extract_sort_key(idx) for idx in df_semana_numeric.index]
+        df_semana_numeric['_sort_mes'] = [k[0] for k in sort_keys]
+        df_semana_numeric['_sort_sem'] = [k[1] for k in sort_keys]
+        
+        # Ordenar por mês e semana
+        df_semana_numeric = df_semana_numeric.sort_values(['_sort_mes', '_sort_sem'])
+        
+        # Remover colunas auxiliares
+        df_semana_numeric = df_semana_numeric.drop(columns=['_sort_mes', '_sort_sem'])
+        
         fig_semana = go.Figure()
         
         # ORDEM CORRIGIDA: Oferta primeiro, depois Ocupação
@@ -778,7 +831,8 @@ elif st.session_state.current_step == 3:
                 y=1.02,
                 xanchor="right",
                 x=1
-            )
+            ),
+            xaxis=dict(type='category')
         )
         st.plotly_chart(fig_semana, use_container_width=True)
         
@@ -928,8 +982,6 @@ st.markdown("""
     Análise Semanal | Versão 2.2 - Ajustes Homologação
 </div>
 """, unsafe_allow_html=True)
-
-
 
 # df_disp["nome_curto"] = (
 #     df_disp["Nutri"]
