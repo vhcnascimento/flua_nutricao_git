@@ -8,19 +8,12 @@ import io
 from PIL import Image
 
 # Configuração da página
-try:
-    logo_icon = Image.open("images/flua-logo.png")
-    st.set_page_config(
-        page_title="Dashboard - Disponibilidade Nutricionistas",
-        page_icon=logo_icon,
-        layout="wide"
-    )
-except:
-    st.set_page_config(
-        page_title="Dashboard - Disponibilidade Nutricionistas",
-        page_icon="📊",
-        layout="wide"
-    )
+logo_icon = Image.open("images/flua-logo.png")
+st.set_page_config(
+    page_title="Dashboard - Disponibilidade Nutricionistas",
+    page_icon=logo_icon,
+    layout="wide"
+)
 
 st.markdown("""
 <style>
@@ -244,8 +237,15 @@ def formatar_numero(num):
     return f"{int(num):,}".replace(",", ".")
 
 def formatar_valor(valor):
-    """Formata valores monetários"""
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    """Formata valores monetários preservando o sinal"""
+    if valor is None:
+        return "R$ 0,00"
+    
+    sinal = "-" if valor < 0 else ""
+    valor_abs = abs(valor)
+    valor_formatado = f"R$ {valor_abs:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    
+    return f"{sinal}{valor_formatado}" if sinal else valor_formatado
 
 def formatar_percentual(valor):
     """Formata percentuais com vírgula como separador decimal"""
@@ -607,19 +607,24 @@ elif st.session_state.current_step == 3:
             )
         
         with col3:
+            delta_ocupacao = taxa_ocupacao - 80
             st.metric(
                 "Taxa de Ocupação",
                 formatar_percentual(taxa_ocupacao),
-                delta=formatar_percentual(taxa_ocupacao - 80) if taxa_ocupacao >= 80 else formatar_percentual(taxa_ocupacao - 80),
-                delta_color="normal" if taxa_ocupacao >= 80 else "inverse",
+                delta=formatar_percentual(delta_ocupacao),
+                delta_color="normal",
                 help="Percentual de janelas ocupadas (meta: 80%)"
             )
         
         with col4:
+            faturamento_esperado = meta_agendamento * st.session_state.valor_consulta if meta_agendamento > 0 else 0
+            delta_faturamento = faturamento - faturamento_esperado if meta_agendamento > 0 else None
+            
             st.metric(
                 "Faturamento",
                 formatar_valor(faturamento),
-                delta=formatar_valor(faturamento - (meta_agendamento * st.session_state.valor_consulta)) if meta_agendamento > 0 else None,
+                delta=formatar_valor(delta_faturamento) if delta_faturamento is not None else None,
+                delta_color="normal",
                 help="Faturamento total do período"
             )
         
@@ -642,11 +647,16 @@ elif st.session_state.current_step == 3:
             
             with col3:
                 diferenca = meta_agendamento - ocupacao_total
+                percentual_meta = (ocupacao_total/meta_agendamento*100) if meta_agendamento > 0 else 0
+                # Converter para delta: se < 100%, fica negativo (vermelho); se >= 100%, fica positivo (verde)
+                delta_meta = percentual_meta - 100
+                
                 st.metric(
                     "Faltam para a Meta",
                     formatar_numero(abs(diferenca)),
-                    delta=f"{(ocupacao_total/meta_agendamento*100):.1f}% da meta",
-                    delta_color="normal" if diferenca <= 0 else "inverse"
+                    delta=f"{delta_meta:+.1f}% da meta",
+                    delta_color="normal",
+                    help="Quanto falta para atingir a meta de agendamentos"
                 )
         
         # TABELA DETALHADA - com linhas alternadas branco/cinza
