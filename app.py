@@ -580,11 +580,14 @@ elif st.session_state.current_step == 3:
         
         # Calcular meta
         if st.session_state.custo_nutri_mes > 0 and st.session_state.valor_consulta > 0:
-            meta_agendamento = np.ceil(
-                st.session_state.custo_nutri_mes * 
-                (1 + (st.session_state.impostos/100)) / 
-                st.session_state.valor_consulta
-            )
+            imposto_decimal = st.session_state.impostos / 100.0
+            if imposto_decimal >= 1.0:
+                meta_agendamento = 0 # Evita divisão por zero
+            else:
+                meta_agendamento = np.ceil(
+                    (st.session_state.custo_nutri_mes / (1 - imposto_decimal)) / 
+                    st.session_state.valor_consulta
+                )
         else:
             meta_agendamento = 0
         
@@ -666,6 +669,8 @@ elif st.session_state.current_step == 3:
         # Ordenar df_output cronologicamente antes de exibir
         import re
         def extract_sort_key(label):
+            if not isinstance(label, str):
+                return (0, 0)
             match = re.search(r'^(\d+)\s+\w+\s+-\s+Sem\s+(\d+)', label)
             if match:
                 mes = int(match.group(1))
@@ -713,6 +718,8 @@ elif st.session_state.current_step == 3:
         # Ordenar cronologicamente
         import re
         def extract_sort_key(label):
+            if not isinstance(label, str):
+                return (0, 0)
             match = re.search(r'^(\d+)\s+\w+\s+-\s+Sem\s+(\d+)', label)
             if match:
                 mes = int(match.group(1))
@@ -781,6 +788,8 @@ elif st.session_state.current_step == 3:
         # Formato: "11 Nov - Sem 1 - 01 a 02"
         import re
         def extract_sort_key(label):
+            if not isinstance(label, str):
+                return (0, 0)
             match = re.search(r'^(\d+)\s+\w+\s+-\s+Sem\s+(\d+)', label)
             if match:
                 mes = int(match.group(1))
