@@ -620,15 +620,20 @@ elif st.session_state.current_step == 3:
             )
         
         with col4:
-            faturamento_esperado = meta_agendamento * st.session_state.valor_consulta if meta_agendamento > 0 else 0
-            delta_faturamento = faturamento - faturamento_esperado if meta_agendamento > 0 else None
+            if meta_agendamento > 0:
+                imposto_decimal = st.session_state.impostos / 100.0
+                faturamento_liquido = faturamento * (1 - imposto_decimal)
+                lucro = faturamento_liquido - st.session_state.custo_nutri_mes
+                delta_faturamento = lucro
+            else:
+                delta_faturamento = None
             
             st.metric(
                 "Faturamento",
                 formatar_valor(faturamento),
                 delta=formatar_valor(delta_faturamento) if delta_faturamento is not None else None,
                 delta_color="normal",
-                help="Faturamento total do período"
+                help="Faturamento bruto do período. O valor colorido abaixo indica o Lucro/Prejuízo Líquido (Faturamento - Impostos - Custo)"
             )
         
         # Meta mensal (só exibe se os parâmetros financeiros estiverem preenchidos)
@@ -654,12 +659,15 @@ elif st.session_state.current_step == 3:
                 # Converter para delta: se < 100%, fica negativo (vermelho); se >= 100%, fica positivo (verde)
                 delta_meta = percentual_meta - 100
                 
+                label_meta = "Acima da Meta" if ocupacao_total >= meta_agendamento else "Faltam para a Meta"
+                help_meta = "Quanto ultrapassou a meta de agendamentos" if ocupacao_total >= meta_agendamento else "Quanto falta para atingir a meta de agendamentos"
+                
                 st.metric(
-                    "Faltam para a Meta",
+                    label_meta,
                     formatar_numero(abs(diferenca)),
                     delta=f"{delta_meta:+.1f}% da meta",
                     delta_color="normal",
-                    help="Quanto falta para atingir a meta de agendamentos"
+                    help=help_meta
                 )
         
         # TABELA DETALHADA - com linhas alternadas branco/cinza
